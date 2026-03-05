@@ -218,7 +218,7 @@ async function getCardFigure(paper, log) {
             console.log("[PubScroll] fig keys:", Object.keys(fig), JSON.stringify(fig));
             const url = fig?.url || fig?.httpUrl || fig?.thumbnailUrl || fig?.originalFileLink;
             if (url) {
-              const proxied = url.startsWith("https://corsproxy") ? url : "https://corsproxy.io/?" + url;
+              const proxied = url.startsWith("https://corsproxy") ? url : url;
               figureCache[pmid] = proxied;
               log && log("✓ EuroPMC: "+url.split("/").pop());
               return proxied;
@@ -229,43 +229,54 @@ async function getCardFigure(paper, log) {
       }
     } catch(e) { log && log("EuroPMC err: "+e.message); }
 
-    // Try 2: NCBI efetch XML to extract figure filenames
+    // Try 2: PMC OA service — returns FTP/HTTPS links to actual figure files
+    try {
+      const oaR = await pfetch(`https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id=PMC${pmcid}&format=tgz`);
+      log && log(`OA svc status:${oaR.status}`);
+      if (oaR.ok) {
+        const oaXml = await oaR.text();
+        console.log("[PubScroll] OA XML:", oaXml.substring(0, 500));
+        // OA service returns links like <link format="tgz" href="ftp://..."/>
+        const ftpMatch = oaXml.match(/href="(ftp:\/\/[^"]+)"/i);
+        const httpsMatch = oaXml.match(/href="(https?:\/\/[^"]+)"/i);
+        log && log(`OA ftp:${ftpMatch?.[1]?.substring(0,40)||"none"} https:${httpsMatch?.[1]?.substring(0,40)||"none"}`);
+      }
+    } catch(e) { log && log("OA err: "+e.message); }
+
+    // Try 3: NCBI efetch XML — get graphic href then use PMC image CDN
     try {
       const r2 = await pfetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcid}&rettype=xml`);
-      log && log(`NCBI efetch status:${r2.status}`);
+      log && log(`efetch status:${r2.status}`);
       if (r2.ok) {
         const xml = await r2.text();
-        // Find ALL graphic hrefs in the XML
         const allMatches = [...xml.matchAll(/<graphic[^>]*xlink:href="([^"]+)"/gi)];
-        console.log(`[PubScroll] NCBI graphics found: ${allMatches.length}`, allMatches.map(m=>m[1]));
+        log && log(`graphics:${allMatches.length} first:${allMatches[0]?.[1]||"none"}`);
+        console.log("[PubScroll] all graphic hrefs:", allMatches.map(m=>m[1]));
         for (const m of allMatches) {
-          const href = m[1];
+          const href = m[1]; // e.g. "pmc/articles/PMC123/bin/gr1" or "gr1"
           const name = href.split("/").pop();
           const baseName = name.replace(/\.[^.]+$/, "");
+          // PMC renders figures via their figure viewer — this URL works without CORS issues
+          // Format: https://pmc.ncbi.nlm.nih.gov/articles/PMC{id}/figure/{figid}/
+          // Also try the rendered figure image directly
           const candidates = [
-            href.startsWith("http") ? href : null,
-            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.jpg`,
-            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.png`,
-            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.gif`,
-            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${name}`,
-          ].filter(Boolean);
-          console.log(`[PubScroll] trying:`, candidates);
+            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.jpg`,
+            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.png`,
+            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${name}`,
+          ];
+          console.log("[PubScroll] pmc.ncbi candidates:", candidates);
           for (const candidate of candidates) {
             try {
-              const test = await pfetch(candidate);
-              console.log(`[PubScroll] ${candidate} -> ${test.status} ${test.ok ? "✓" : "✗"}`);
-              if (test.ok) {
-                // Route through proxy so browser can load the image
-                const proxied = "https://corsproxy.io/?" + candidate;
-                figureCache[pmid] = proxied;
-                log && log("✓ " + candidate.split("/").pop());
-                return proxied;
-              }
-            } catch(e2) { console.log(`[PubScroll] fetch err: ${e2.message}`); }
+              const test = await fetch(candidate, { method: "HEAD", mode: "no-cors" });
+              // no-cors always returns opaque response with status 0 — just use the URL and see if img loads
+              figureCache[pmid] = candidate;
+              log && log("trying: " + baseName);
+              return candidate;
+            } catch(e2) { }
           }
         }
       }
-    } catch(e) { log && log("NCBI err: "+e.message); }
+    } catch(e) { log && log("efetch err: "+e.message); }
   } else {
     // No pmcid — try looking it up via elink
     try {
