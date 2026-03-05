@@ -112,27 +112,91 @@ async function fetchPmcFigure(pmcId) {
 
 function getTopicImageUrl(paper) {
   const title = (paper.title || "").toLowerCase();
+  // Curated Wikimedia Commons high-res science images, fully public domain, CORS-open
   const topics = [
-    { keys: ["brain","neural","neuro","cognit","alzheim","parkinson","epilep"], q: "neuroscience brain" },
-    { keys: ["heart","cardiac","cardio","coronary","vascular"], q: "heart cardiology" },
-    { keys: ["cancer","tumor","oncol","carcinoma","leukemia"], q: "cancer cells microscope" },
-    { keys: ["gene","genom","crispr","dna","rna","sequenc"], q: "dna genetics" },
-    { keys: ["virus","viral","covid","infect","bacteria","pathogen"], q: "virus pathogen microscope" },
-    { keys: ["microbiome","gut","intestin","colon"], q: "gut microbiome" },
-    { keys: ["lung","pulmon","respirat","asthma"], q: "lung respiratory" },
-    { keys: ["depress","anxiety","mental","psychiat"], q: "mental health brain" },
-    { keys: ["diabet","insulin","glucose","metabol"], q: "diabetes metabolism" },
-    { keys: ["vaccine","immuniz","antibody"], q: "vaccine immunology" },
-    { keys: ["mri","imaging","scan","radiolog"], q: "medical imaging mri" },
-    { keys: ["protein","enzyme","molecul","biochem"], q: "molecular biology protein" },
-    { keys: ["surgery","surgic","transplant"], q: "surgery operating room" },
-    { keys: ["bone","joint","arthrit","spine"], q: "bone anatomy skeleton" },
-    { keys: ["liver","hepat","kidney","renal"], q: "organ anatomy biology" },
+    { keys: ["brain","neural","neuro","cognit","alzheim","parkinson","epilep","cerebell"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/1/12/Human_brain_NIH.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Human_brain_NIH.jpg/800px-Human_brain_NIH.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/a/a7/Camponotus_flavomarginatus_ant.jpg",
+      ]},
+    { keys: ["heart","cardiac","cardio","coronary","vascular","arterial","atrial"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Heart_diagram-en.svg/800px-Heart_diagram-en.svg.png",
+        "https://upload.wikimedia.org/wikipedia/commons/1/1b/Heart_anterior_exterior_view.jpg",
+      ]},
+    { keys: ["cancer","tumor","oncol","carcinoma","leukemia","lymphoma","glioma"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Mitosis_cells_sequence.svg/800px-Mitosis_cells_sequence.svg.png",
+        "https://upload.wikimedia.org/wikipedia/commons/5/5e/Tumor_Angiogenesis.jpg",
+      ]},
+    { keys: ["gene","genom","crispr","dna","rna","sequenc","chromos","allele"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/DNA_Structure%2BKey%2BLabelled.pn_NoBB.png/600px-DNA_Structure%2BKey%2BLabelled.pn_NoBB.png",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Karyotype.png/800px-Karyotype.png",
+      ]},
+    { keys: ["virus","viral","covid","sars","infect","bacteria","pathogen","fungal"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/SARS-CoV-2_without_background.png/600px-SARS-CoV-2_without_background.png",
+        "https://upload.wikimedia.org/wikipedia/commons/9/90/Coronavirus._SARS-CoV-2.png",
+      ]},
+    { keys: ["microbiome","gut","intestin","colon","microbiota","probiotic"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Clostridium_difficile_01.jpg/800px-Clostridium_difficile_01.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/0/09/EscherichiaColi_NIAID.jpg",
+      ]},
+    { keys: ["lung","pulmon","respirat","asthma","copd","bronch"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Blausen_0620_LungAnatomy.png/800px-Blausen_0620_LungAnatomy.png",
+      ]},
+    { keys: ["depress","anxiety","mental","psychiat","schizophren","bipolar","adhd"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Human_brain_NIH.jpg/800px-Human_brain_NIH.jpg",
+      ]},
+    { keys: ["diabet","insulin","glucose","metabol","obes","pancrea","thyroid"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Islets_of_Langerhans.jpg/800px-Islets_of_Langerhans.jpg",
+      ]},
+    { keys: ["vaccine","immuniz","antibody","immun","t cell","b cell","cytokine"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/T_cell_activation.svg/600px-T_cell_activation.svg.png",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Antibody.svg/600px-Antibody.svg.png",
+      ]},
+    { keys: ["mri","imaging","scan","radiolog","ultrasound","x-ray","tomograph"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/MRI_brain_sagittal_section.jpg/600px-MRI_brain_sagittal_section.jpg",
+      ]},
+    { keys: ["protein","enzyme","molecul","biochem","receptor","ligand","kinase"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Myoglobin.png/600px-Myoglobin.png",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Proteinviews-1tim.png/600px-Proteinviews-1tim.png",
+      ]},
+    { keys: ["surgery","surgic","transplant","laparoscop","endoscop"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Surgical_stapler.jpg/800px-Surgical_stapler.jpg",
+      ]},
+    { keys: ["bone","joint","arthrit","spine","orthop","fracture","cartilage"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Skeleton_anterior_labeled.svg/400px-Skeleton_anterior_labeled.svg.png",
+      ]},
+    { keys: ["liver","hepat","kidney","renal","nephro","biliar"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Kidney_section.jpg/800px-Kidney_section.jpg",
+      ]},
+    { keys: ["cell","mitochon","organelle","membran","cytoplasm","nucleus"],
+      imgs: [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Animal_Cell.svg/600px-Animal_Cell.svg.png",
+      ]},
   ];
   const matched = topics.find(t => t.keys.some(k => title.includes(k)));
-  const q = matched ? matched.q : "medical science research";
-  const seed = parseInt(paper.uid || "1") % 100;
-  return `https://source.unsplash.com/800x1200/?${encodeURIComponent(q)}&sig=${seed}`;
+  const imgs = matched ? matched.imgs : [
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Antibody.svg/600px-Antibody.svg.png",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Animal_Cell.svg/600px-Animal_Cell.svg.png",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/DNA_Structure%2BKey%2BLabelled.pn_NoBB.png/600px-DNA_Structure%2BKey%2BLabelled.pn_NoBB.png",
+  ];
+  // Pick deterministically by PMID so same paper always gets same image
+  const idx = parseInt(paper.uid || "0") % imgs.length;
+  return imgs[idx];
 }
 
 async function fetchEuropePmcFigure(pmid, paper) {
@@ -761,7 +825,7 @@ export default function PubScroll() {
           <div style={{
             position: "absolute", inset: 0,
             transform: `translateY(calc(${-currentIndex * 100}% + ${dragOffset}px))`,
-            transition: isDragging.current ? "none" : "transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            transition: isDragging.current ? "none" : "transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)",
             willChange: "transform",
           }}>
             {papers.map((paper, i) => {
