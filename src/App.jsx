@@ -86,6 +86,61 @@ async function fetchAltmetric(doi) {
   } catch { altmetricCache[doi] = null; return null; }
 }
 
+// ─── PMC Figure fetcher ───────────────────────────────────────────────────────
+const figureCache = {};
+async function fetchPaperFigure(pmid, pmcid) {
+  const key = pmid;
+  if (figureCache[key] !== undefined) return figureCache[key];
+  try {
+    // Try PMC open access figures via NCBI figure API
+    const id = pmcid || null;
+    if (!id) {
+      // Try to get PMC ID from elink
+      const linkUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id=${pmid}&retmode=json`;
+      const r = await pfetch(linkUrl);
+      const d = await r.json();
+      const ids = d?.linksets?.[0]?.linksetdbs?.find(l => l.dbto === "pmc")?.links;
+      if (!ids?.length) { figureCache[key] = null; return null; }
+      const pmcId = ids[0];
+      // Fetch PMC article figures
+      const figUrl = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcId}/figure/`;
+      // Use OA API to get figure images
+      const oaUrl = `https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id=PMC${pmcId}`;
+      const oaR = await pfetch(oaUrl);
+      const oaText = await oaR.text();
+      // Parse XML for figure URLs — look for jpg/png links
+      const imgMatch = oaText.match(/href="(https?:\/\/[^"]+\.(jpg|jpeg|png))"/i);
+      if (imgMatch) {
+        figureCache[key] = imgMatch[1];
+        return figureCache[key];
+      }
+      // Fallback: try direct PMC figure thumbnail
+      const thumbUrl = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcId}/bin/`;
+      figureCache[key] = null;
+      return null;
+    }
+  } catch {
+    figureCache[key] = null;
+    return null;
+  }
+  figureCache[key] = null;
+  return null;
+}
+
+// Better approach: use Unpaywall/Semantic Scholar for open figures
+async function fetchSemanticFigure(doi) {
+  if (!doi) return null;
+  try {
+    const url = `https://api.semanticscholar.org/graph/v1/paper/DOI:${doi}?fields=openAccessPdf,figures`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    // figures field has image URLs
+    if (d.figures?.length) return d.figures[0].url;
+    return null;
+  } catch { return null; }
+}
+
 // ─── Profile helpers ──────────────────────────────────────────────────────────
 function loadProfile() {
   try {
@@ -288,56 +343,75 @@ function PaperCard({ paper, altScore, onTap }) {
     ? "linear-gradient(160deg, #1a2a0a 0%, #0f1f0a 50%, #061208 100%)"
     : "linear-gradient(160deg, #0d2a4a 0%, #0a1f3a 50%, #061428 100%)";
 
+  const [figureUrl, setFigureUrl] = useState(null);
+  const [figLoaded, setFigLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSemanticFigure(doi).then(url => {
+      if (!cancelled && url) setFigureUrl(url);
+    });
+    return () => { cancelled = true; };
+  }, [doi]);
+
   return (
     <div onClick={onTap} style={{
       width: "100%", height: "100%", background: bgGrad,
       display: "flex", flexDirection: "column", justifyContent: "space-between",
       cursor: "pointer", userSelect: "none", position: "relative", overflow: "hidden",
     }}>
-      {/* Grid texture */}
-      <div style={{
-        position: "absolute", inset: 0, opacity: 0.035, pointerEvents: "none",
-        backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
-        backgroundSize: "40px 40px"
-      }} />
+      {/* Figure background image */}
+      {figureUrl && (
+        <img
+          src={figureUrl}
+          onLoad={() => setFigLoaded(true)}
+          onError={() => setFigureUrl(null)}
+          alt=""
+          style={{
+            position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover", objectPosition: "center",
+            opacity: figLoaded ? 0.28 : 0,
+            transition: "opacity 0.8s ease",
+            filter: "saturate(0.7) brightness(0.6)",
+            pointerEvents: "none", zIndex: 1,
+          }}
+        />
+      )}
 
-      {/* PMID watermark */}
-      <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: "translate(-50%, -50%)",
-        fontSize: "clamp(70px, 22vw, 140px)", fontWeight: 900,
-        color: `${accentColor}06`, fontFamily: "Georgia, serif",
-        letterSpacing: "-0.05em", userSelect: "none", whiteSpace: "nowrap", pointerEvents: "none"
-      }}>{paper.uid}</div>
+      {/* Grid texture — shown when no figure */}
+      {!figureUrl && (
+        <div style={{
+          position: "absolute", inset: 0, opacity: 0.035, pointerEvents: "none",
+          backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
+          backgroundSize: "40px 40px"
+        }} />
+      )}
 
-      {/* TOP: logo + badges — sits below status bar via safe-area padding */}
+      {/* TOP: just a subtle fade for readability under the banner — no logo */}
       <div style={{
         position: "relative", zIndex: 2,
-        padding: "calc(env(safe-area-inset-top, 0px) + 16px) 20px 20px",
-        background: "linear-gradient(180deg, rgba(4,10,20,0.95) 0%, transparent 100%)",
-        display: "flex", alignItems: "center", justifyContent: "space-between"
+        padding: "calc(env(safe-area-inset-top, 0px) + 56px) 20px 0",
+        background: "linear-gradient(180deg, rgba(4,10,20,0.6) 0%, transparent 100%)",
+        display: "flex", justifyContent: "flex-end", pointerEvents: "none",
       }}>
-        <span style={{ fontFamily: "Georgia, serif", fontSize: "1.05rem", fontWeight: 700, color: accentColor }}>
-          PubScroll
-        </span>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {altScore && altScore > 20 && (
-            <span style={{
-              fontSize: "0.6rem", fontWeight: 800, padding: "2px 8px",
-              background: buzzy ? "rgba(126,200,80,0.15)" : "rgba(245,158,11,0.12)",
-              color: buzzy ? "#7ec850" : "#f59e0b",
-              border: `1px solid ${buzzy ? "rgba(126,200,80,0.35)" : "rgba(245,158,11,0.3)"}`,
-              borderRadius: 20, letterSpacing: "0.05em", textTransform: "uppercase"
-            }}>⚡ {Math.round(altScore)}</span>
-          )}
-        </div>
+        {altScore && altScore > 20 && (
+          <span style={{
+            fontSize: "0.6rem", fontWeight: 800, padding: "2px 8px",
+            background: buzzy ? "rgba(126,200,80,0.15)" : "rgba(245,158,11,0.12)",
+            color: buzzy ? "#7ec850" : "#f59e0b",
+            border: `1px solid ${buzzy ? "rgba(126,200,80,0.35)" : "rgba(245,158,11,0.3)"}`,
+            borderRadius: 20, letterSpacing: "0.05em", textTransform: "uppercase",
+            pointerEvents: "auto",
+          }}>⚡ {Math.round(altScore)}</span>
+        )}
       </div>
 
-      {/* BOTTOM: content sits above home bar */}
+      {/* BOTTOM: pinned to absolute bottom edge, no floating band */}
       <div style={{
-        position: "relative", zIndex: 2,
-        padding: "60px 24px calc(env(safe-area-inset-bottom, 0px) + 28px)",
-        background: "linear-gradient(0deg, rgba(4,10,20,0.99) 0%, rgba(4,10,20,0.88) 70%, transparent 100%)",
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        zIndex: 2,
+        padding: "80px 24px calc(env(safe-area-inset-bottom, 0px) + 24px)",
+        background: "linear-gradient(0deg, rgba(4,10,20,1) 0%, rgba(4,10,20,0.95) 55%, transparent 100%)",
       }}>
         {/* Journal + year + pubType */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -733,14 +807,31 @@ export default function PubScroll() {
         )}
       </div>
 
-      {/* Top controls — safe area aware */}
-      <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top, 0px) + 14px)", right: 14, zIndex: 20, display: "flex", gap: 8 }}>
-        <button onClick={() => { setShowSearch(s => !s); setShowMenu(false); }}
-          style={{ background: "rgba(6,20,40,0.9)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 6, color: "#4a9edd", width: 36, height: 36, fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}>🔍</button>
-        <button onClick={() => { setShowMenu(s => !s); setShowSearch(false); }}
-          style={{ background: "rgba(6,20,40,0.9)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 6, color: "#4a9edd", padding: "0 12px", height: 36, fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.03em" }}>
-          {isAlgoMode ? "✦ For You" : "Browse"} ▾
-        </button>
+      {/* Top banner — PubScroll logo + controls */}
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 20,
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        background: "linear-gradient(180deg, rgba(4,10,20,0.97) 0%, rgba(4,10,20,0.85) 75%, transparent 100%)",
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 16px 20px", pointerEvents: "auto",
+        }}>
+          {/* Logo */}
+          <span style={{ fontFamily: "Georgia, serif", fontSize: "1.15rem", fontWeight: 700, color: "#4a9edd", letterSpacing: "-0.01em" }}>
+            PubScroll
+          </span>
+          {/* Controls */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { setShowSearch(s => !s); setShowMenu(false); }}
+              style={{ background: "rgba(6,20,40,0.85)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 6, color: "#4a9edd", width: 34, height: 34, fontSize: "0.95rem", display: "flex", alignItems: "center", justifyContent: "center" }}>🔍</button>
+            <button onClick={() => { setShowMenu(s => !s); setShowSearch(false); }}
+              style={{ background: "rgba(6,20,40,0.85)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 6, color: "#4a9edd", padding: "0 12px", height: 34, fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.03em" }}>
+              {isAlgoMode ? "✦ For You" : "Browse"} ▾
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Search */}
