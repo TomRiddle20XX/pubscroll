@@ -330,14 +330,6 @@ function PaperCard({ paper, altScore, onTap }) {
               borderRadius: 20, letterSpacing: "0.05em", textTransform: "uppercase"
             }}>⚡ {Math.round(altScore)}</span>
           )}
-          {pubType && (
-            <span style={{
-              fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.08em",
-              textTransform: "uppercase", padding: "2px 8px",
-              background: `${accentColor}18`, color: accentColor,
-              border: `1px solid ${accentColor}40`, borderRadius: 3
-            }}>{pubType}</span>
-          )}
         </div>
       </div>
 
@@ -347,12 +339,20 @@ function PaperCard({ paper, altScore, onTap }) {
         padding: "60px 24px calc(env(safe-area-inset-bottom, 0px) + 28px)",
         background: "linear-gradient(0deg, rgba(4,10,20,0.99) 0%, rgba(4,10,20,0.88) 70%, transparent 100%)",
       }}>
-        {/* Journal + year */}
+        {/* Journal + year + pubType */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: "0.67rem", color: accentColor, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
             {journal.length > 44 ? journal.substring(0, 44) + "…" : journal}
           </span>
           {year && <span style={{ fontSize: "0.67rem", color: "#5a7a99", fontFamily: "monospace" }}>· {year}</span>}
+          {pubType && (
+            <span style={{
+              fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.07em",
+              textTransform: "uppercase", padding: "2px 7px",
+              background: `${accentColor}18`, color: accentColor,
+              border: `1px solid ${accentColor}40`, borderRadius: 3
+            }}>{pubType}</span>
+          )}
         </div>
 
         {/* Title */}
