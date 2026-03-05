@@ -188,30 +188,6 @@ async function fetchEuropePmcFigure(pmid) {
   } catch { europePmcFigCache[pmid] = null; return null; }
 }
 
-// ─── Europe PMC figure fetcher ───────────────────────────────────────────────
-const europePmcFigCache = {};
-async function fetchEuropePmcFigure(pmid) {
-  if (!pmid) return null;
-  if (europePmcFigCache[pmid] !== undefined) return europePmcFigCache[pmid];
-  try {
-    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:${pmid}%20AND%20SRC:MED&resulttype=core&format=json&pageSize=1`;
-    const r = await fetch(url);
-    if (!r.ok) { europePmcFigCache[pmid] = null; return null; }
-    const d = await r.json();
-    const article = d?.resultList?.result?.[0];
-    const pmcid = article?.pmcid;
-    if (!pmcid) { europePmcFigCache[pmid] = null; return null; }
-    const figR = await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/figures?format=json`);
-    if (!figR.ok) { europePmcFigCache[pmid] = null; return null; }
-    const figD = await figR.json();
-    const figures = figD?.figures?.figure;
-    if (!figures?.length) { europePmcFigCache[pmid] = null; return null; }
-    const imgUrl = figures[0]?.url || figures[0]?.originalFileLink || null;
-    europePmcFigCache[pmid] = imgUrl;
-    return imgUrl;
-  } catch { europePmcFigCache[pmid] = null; return null; }
-}
-
 // ─── Profile helpers ──────────────────────────────────────────────────────────
 function loadProfile() {
   try {
