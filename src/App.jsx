@@ -224,21 +224,42 @@ async function getCardFigure(paper, log) {
       }
     } catch(e) { log && log("EuroPMC err: "+e.message); }
 
-    // Try 2: NCBI elink to get figure list
+    // Try 2: NCBI efetch XML to extract figure filenames
     try {
       const r2 = await pfetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcid}&rettype=xml`);
       log && log(`NCBI efetch status:${r2.status}`);
       if (r2.ok) {
         const xml = await r2.text();
-        // Look for any image filename in the XML
-        const m = xml.match(/<graphic[^>]*xlink:href="([^"]+)"/i);
-        log && log(`NCBI graphic match: ${m?.[1]||"none"}`);
-        if (m?.[1]) {
-          const name = m[1].split("/").pop().replace(/\.\w+$/,"");
-          const url = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${name}.jpg`;
-          figureCache[pmid] = url;
-          log && log("✓ NCBI fig: "+url);
-          return url;
+        // Find ALL graphic hrefs in the XML
+        const allMatches = [...xml.matchAll(/<graphic[^>]*xlink:href="([^"]+)"/gi)];
+        log && log(`NCBI graphics found: ${allMatches.length} refs: ${allMatches.slice(0,2).map(m=>m[1]).join(" | ")}`);
+        for (const m of allMatches) {
+          const href = m[1];
+          // href is often like "pmc/articles/PMC123/bin/filename" or just "filename"
+          // Try to construct the full NCBI bin URL
+          let name = href.split("/").pop();
+          // Remove extension if present, we'll try jpg
+          const baseName = name.replace(/\.[^.]+$/, "");
+          // Try direct URL first (some hrefs are already full paths)
+          const candidates = [
+            href.startsWith("http") ? href : null,
+            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.jpg`,
+            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.png`,
+            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${name}`,
+          ].filter(Boolean);
+          log && log(`trying candidates: ${candidates[0]?.substring(0,80)}`);
+          // Test the jpg URL via a HEAD request
+          for (const candidate of candidates) {
+            try {
+              const test = await pfetch(candidate);
+              log && log(`candidate ${candidate.substring(0,60)} -> ${test.status}`);
+              if (test.ok) {
+                figureCache[pmid] = candidate;
+                log && log("✓ NCBI fig: " + candidate);
+                return candidate;
+              }
+            } catch(e2) { log && log(`candidate err: ${e2.message}`); }
+          }
         }
       }
     } catch(e) { log && log("NCBI err: "+e.message); }
@@ -492,15 +513,15 @@ function PaperCard({ paper, altScore, onTap }) {
       {/* Figure/topic background image — always present */}
       <img
         src={figureUrl || ""}
-        onLoad={() => setFigLoaded(true)}
-        onError={e => { e.target.style.display = "none"; }}
+        onLoad={() => { setFigLoaded(true); setDebugInfo(prev => prev + " [IMG LOADED]"); }}
+        onError={e => { setDebugInfo(prev => prev + " [IMG 404/CORS]"); e.target.style.opacity = 0; }}
         alt=""
         style={{
           position: "absolute", inset: 0, width: "100%", height: "100%",
           objectFit: "cover", objectPosition: "center",
-          opacity: figureUrl && figLoaded ? 0.22 : 0,
+          opacity: figureUrl && figLoaded ? 0.28 : 0,
           transition: "opacity 1s ease",
-          filter: "saturate(0.5) brightness(0.5)",
+          filter: "saturate(0.6) brightness(0.55)",
           pointerEvents: "none", zIndex: 1,
           display: figureUrl ? "block" : "none",
         }}
