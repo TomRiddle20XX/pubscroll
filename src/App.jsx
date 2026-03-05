@@ -267,15 +267,24 @@ async function getCardFigure(paper, log) {
             `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.tif`,
           ];
           console.log("[PubScroll] pmc.ncbi candidates:", candidates);
-          for (const candidate of candidates) {
-            try {
-              const test = await fetch(candidate, { method: "HEAD", mode: "no-cors" });
-              // no-cors always returns opaque response with status 0 — just use the URL and see if img loads
-              const safeUrl = candidate.replace(/^http:\/\//, "https://");
-              figureCache[pmid] = safeUrl;
-              log && log("trying: " + safeUrl.split("/").pop());
-              return safeUrl;
-            } catch(e2) { }
+          // Test each candidate by actually loading it as an Image
+          // This bypasses CORS entirely — images load cross-origin without CORS headers
+          const winner = await new Promise(resolve => {
+            let resolved = false;
+            let tried = 0;
+            candidates.forEach(candidate => {
+              const img = new Image();
+              img.onload = () => { if (!resolved) { resolved = true; resolve(candidate); } };
+              img.onerror = () => { tried++; if (tried === candidates.length && !resolved) resolve(null); };
+              img.src = candidate;
+            });
+            // Timeout after 8 seconds
+            setTimeout(() => { if (!resolved) resolve(null); }, 8000);
+          });
+          if (winner) {
+            figureCache[pmid] = winner;
+            log && log("✓ " + winner.split("/").pop());
+            return winner;
           }
         }
       }
