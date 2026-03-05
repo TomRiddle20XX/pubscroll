@@ -260,18 +260,21 @@ async function getCardFigure(paper, log) {
           // Format: https://pmc.ncbi.nlm.nih.gov/articles/PMC{id}/figure/{figid}/
           // Also try the rendered figure image directly
           const candidates = [
+            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${name}`,
             `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.jpg`,
             `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.png`,
-            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${name}`,
+            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.gif`,
+            `https://pmc.ncbi.nlm.nih.gov/articles/PMC${pmcid}/bin/${baseName}.tif`,
           ];
           console.log("[PubScroll] pmc.ncbi candidates:", candidates);
           for (const candidate of candidates) {
             try {
               const test = await fetch(candidate, { method: "HEAD", mode: "no-cors" });
               // no-cors always returns opaque response with status 0 — just use the URL and see if img loads
-              figureCache[pmid] = candidate;
-              log && log("trying: " + baseName);
-              return candidate;
+              const safeUrl = candidate.replace(/^http:\/\//, "https://");
+              figureCache[pmid] = safeUrl;
+              log && log("trying: " + safeUrl.split("/").pop());
+              return safeUrl;
             } catch(e2) { }
           }
         }
