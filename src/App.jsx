@@ -197,36 +197,66 @@ function getTopicImageUrl(paper) {
 async function getCardFigure(paper, log) {
   const pmid = paper.uid;
   if (figureCache[pmid] !== undefined) {
-    log && log("cached:" + (figureCache[pmid] || "null").toString().substring(0,50));
+    log && log("cached: " + (figureCache[pmid]||"null").toString().substring(0,80));
     return figureCache[pmid];
   }
 
   const pmcid = extractPmcId(paper);
-  log && log(`pmid:${pmid} pmcid:${pmcid||"none"} - trying EuropePMC...`);
+  log && log(`pmid:${pmid} pmcid:${pmcid||"NONE"}`);
 
   if (pmcid) {
+    // Try 1: Europe PMC figures endpoint
     try {
-      const apiUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/PMC${pmcid}/figures?format=json`;
-      log && log("fetching: " + apiUrl.substring(0,70));
-      const r = await fetch(apiUrl);
-      log && log(`europePMC status: ${r.status} ok:${r.ok}`);
+      const r = await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/PMC${pmcid}/figures?format=json`);
+      log && log(`EuroPMC status:${r.status}`);
       if (r.ok) {
         const d = await r.json();
-        log && log("response keys: " + Object.keys(d).join(","));
         const figs = d?.figures?.figure;
-        log && log(`figures array: ${JSON.stringify(figs?.slice(0,1))?.substring(0,100)}`);
+        log && log(`figs:${figs?.length||0} first:${JSON.stringify(figs?.[0])?.substring(0,120)}`);
         if (figs?.length) {
-          const url = figs[0]?.url || figs[0]?.httpUrl || figs[0]?.thumbnailUrl;
-          if (url) { figureCache[pmid] = url; log && log("✓ PMC fig: " + url); return url; }
+          for (const fig of figs) {
+            const url = fig?.url || fig?.httpUrl || fig?.thumbnailUrl || fig?.originalFileLink;
+            if (url) { figureCache[pmid] = url; log && log("✓ EuroPMC: "+url.substring(0,80)); return url; }
+          }
+          // Log all keys so we can see what fields exist
+          log && log("fig keys: " + Object.keys(figs[0]||{}).join(","));
         }
       }
-    } catch(e) { log && log("europePMC error: " + e.message); }
+    } catch(e) { log && log("EuroPMC err: "+e.message); }
+
+    // Try 2: NCBI elink to get figure list
+    try {
+      const r2 = await pfetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcid}&rettype=xml`);
+      log && log(`NCBI efetch status:${r2.status}`);
+      if (r2.ok) {
+        const xml = await r2.text();
+        // Look for any image filename in the XML
+        const m = xml.match(/<graphic[^>]*xlink:href="([^"]+)"/i);
+        log && log(`NCBI graphic match: ${m?.[1]||"none"}`);
+        if (m?.[1]) {
+          const name = m[1].split("/").pop().replace(/\.\w+$/,"");
+          const url = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${name}.jpg`;
+          figureCache[pmid] = url;
+          log && log("✓ NCBI fig: "+url);
+          return url;
+        }
+      }
+    } catch(e) { log && log("NCBI err: "+e.message); }
+  } else {
+    // No pmcid — try looking it up via elink
+    try {
+      const r = await pfetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id=${pmid}&retmode=json`);
+      if (r.ok) {
+        const d = await r.json();
+        const links = d?.linksets?.[0]?.linksetdbs?.find(l=>l.dbto==="pmc")?.links;
+        log && log(`elink pmc ids: ${JSON.stringify(links)}`);
+      }
+    } catch(e) { log && log("elink err: "+e.message); }
   }
 
-  const topicUrl = getTopicImageUrl(paper);
-  log && log("fallback topic url: " + topicUrl.substring(0,60));
-  figureCache[pmid] = topicUrl;
-  return topicUrl;
+  figureCache[pmid] = null;
+  log && log("✗ no figure found");
+  return null;
 }
 
 // ─── Profile helpers ──────────────────────────────────────────────────────────
