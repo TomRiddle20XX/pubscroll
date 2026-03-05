@@ -95,118 +95,117 @@ function extractPmcId(paper) {
   return pmc ? pmc.value.replace("PMC", "") : null;
 }
 
-async function fetchPmcFigure(pmcId) {
-  if (!pmcId) return null;
+// Europe PMC figures API — works cross-origin, good coverage for OA papers
+async function fetchEuropePmcFigure(pmcid) {
+  if (!pmcid) return null;
   try {
-    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcId}&rettype=xml&retmode=xml`;
-    const r = await pfetch(url);
-    const text = await r.text();
-    const match = text.match(/xlink:href="([^"]+)"/i);
-    if (match) {
-      const name = match[1].split("/").pop();
-      return `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcId}/bin/${name}.jpg`;
+    const r = await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/PMC${pmcid}/figures?format=json`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const figs = d?.figures?.figure;
+    if (!figs?.length) return null;
+    // Get first figure with a real image URL
+    for (const fig of figs) {
+      const url = fig?.url || fig?.httpUrl;
+      if (url && (url.includes("http"))) return url;
     }
     return null;
   } catch { return null; }
 }
 
-function getTopicImageUrl(paper) {
-  const title = (paper.title || "").toLowerCase();
-  // Curated Wikimedia Commons high-res science images, fully public domain, CORS-open
-  const topics = [
-    { keys: ["brain","neural","neuro","cognit","alzheim","parkinson","epilep","cerebell"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/1/12/Human_brain_NIH.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Human_brain_NIH.jpg/800px-Human_brain_NIH.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/a/a7/Camponotus_flavomarginatus_ant.jpg",
-      ]},
-    { keys: ["heart","cardiac","cardio","coronary","vascular","arterial","atrial"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Heart_diagram-en.svg/800px-Heart_diagram-en.svg.png",
-        "https://upload.wikimedia.org/wikipedia/commons/1/1b/Heart_anterior_exterior_view.jpg",
-      ]},
-    { keys: ["cancer","tumor","oncol","carcinoma","leukemia","lymphoma","glioma"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Mitosis_cells_sequence.svg/800px-Mitosis_cells_sequence.svg.png",
-        "https://upload.wikimedia.org/wikipedia/commons/5/5e/Tumor_Angiogenesis.jpg",
-      ]},
-    { keys: ["gene","genom","crispr","dna","rna","sequenc","chromos","allele"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/DNA_Structure%2BKey%2BLabelled.pn_NoBB.png/600px-DNA_Structure%2BKey%2BLabelled.pn_NoBB.png",
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Karyotype.png/800px-Karyotype.png",
-      ]},
-    { keys: ["virus","viral","covid","sars","infect","bacteria","pathogen","fungal"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/SARS-CoV-2_without_background.png/600px-SARS-CoV-2_without_background.png",
-        "https://upload.wikimedia.org/wikipedia/commons/9/90/Coronavirus._SARS-CoV-2.png",
-      ]},
-    { keys: ["microbiome","gut","intestin","colon","microbiota","probiotic"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Clostridium_difficile_01.jpg/800px-Clostridium_difficile_01.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/0/09/EscherichiaColi_NIAID.jpg",
-      ]},
-    { keys: ["lung","pulmon","respirat","asthma","copd","bronch"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Blausen_0620_LungAnatomy.png/800px-Blausen_0620_LungAnatomy.png",
-      ]},
-    { keys: ["depress","anxiety","mental","psychiat","schizophren","bipolar","adhd"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Human_brain_NIH.jpg/800px-Human_brain_NIH.jpg",
-      ]},
-    { keys: ["diabet","insulin","glucose","metabol","obes","pancrea","thyroid"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Islets_of_Langerhans.jpg/800px-Islets_of_Langerhans.jpg",
-      ]},
-    { keys: ["vaccine","immuniz","antibody","immun","t cell","b cell","cytokine"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/T_cell_activation.svg/600px-T_cell_activation.svg.png",
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Antibody.svg/600px-Antibody.svg.png",
-      ]},
-    { keys: ["mri","imaging","scan","radiolog","ultrasound","x-ray","tomograph"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/MRI_brain_sagittal_section.jpg/600px-MRI_brain_sagittal_section.jpg",
-      ]},
-    { keys: ["protein","enzyme","molecul","biochem","receptor","ligand","kinase"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Myoglobin.png/600px-Myoglobin.png",
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Proteinviews-1tim.png/600px-Proteinviews-1tim.png",
-      ]},
-    { keys: ["surgery","surgic","transplant","laparoscop","endoscop"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Surgical_stapler.jpg/800px-Surgical_stapler.jpg",
-      ]},
-    { keys: ["bone","joint","arthrit","spine","orthop","fracture","cartilage"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Skeleton_anterior_labeled.svg/400px-Skeleton_anterior_labeled.svg.png",
-      ]},
-    { keys: ["liver","hepat","kidney","renal","nephro","biliar"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Kidney_section.jpg/800px-Kidney_section.jpg",
-      ]},
-    { keys: ["cell","mitochon","organelle","membran","cytoplasm","nucleus"],
-      imgs: [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Animal_Cell.svg/600px-Animal_Cell.svg.png",
-      ]},
-  ];
-  const matched = topics.find(t => t.keys.some(k => title.includes(k)));
-  const imgs = matched ? matched.imgs : [
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Antibody.svg/600px-Antibody.svg.png",
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Animal_Cell.svg/600px-Animal_Cell.svg.png",
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/DNA_Structure%2BKey%2BLabelled.pn_NoBB.png/600px-DNA_Structure%2BKey%2BLabelled.pn_NoBB.png",
-  ];
-  // Pick deterministically by PMID so same paper always gets same image
-  const idx = parseInt(paper.uid || "0") % imgs.length;
-  return imgs[idx];
+// OpenAlex — get paper metadata including OA PDF link
+async function fetchOpenAlexFigure(doi) {
+  if (!doi) return null;
+  try {
+    const r = await fetch(`https://api.openalex.org/works/https://doi.org/${doi}?select=best_oa_location,primary_location`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    // Get PDF URL if available, use pdf.js thumbnail via a proxy
+    const pdfUrl = d?.best_oa_location?.pdf_url;
+    return pdfUrl || null;
+  } catch { return null; }
 }
 
-async function fetchEuropePmcFigure(pmid, paper) {
-  if (!pmid) return getTopicImageUrl(paper);
+// Hardcoded high-quality topic images from Unsplash (direct CDN URLs, always work)
+const TOPIC_IMAGES = {
+  neuro: [
+    "https://images.unsplash.com/photo-1564325724739-bae0bd08762c?w=800",
+    "https://images.unsplash.com/photo-1559757175-0eb30cd8c063?w=800",
+    "https://images.unsplash.com/photo-1582719508461-905c673771fd?w=800",
+  ],
+  cardio: [
+    "https://images.unsplash.com/photo-1530026186672-2cd00ffc50fe?w=800",
+    "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=800",
+  ],
+  cancer: [
+    "https://images.unsplash.com/photo-1576086213369-97a306d36557?w=800",
+    "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=800",
+  ],
+  genetics: [
+    "https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=800",
+    "https://images.unsplash.com/photo-1518152006812-edab29b069ac?w=800",
+  ],
+  micro: [
+    "https://images.unsplash.com/photo-1583912267550-d44c9c3b21d6?w=800",
+    "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800",
+  ],
+  immune: [
+    "https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?w=800",
+    "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=800",
+  ],
+  imaging: [
+    "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800",
+    "https://images.unsplash.com/photo-1516069677018-378515003435?w=800",
+  ],
+  surgery: [
+    "https://images.unsplash.com/photo-1551190822-a9333d879b1f?w=800",
+    "https://images.unsplash.com/photo-1603398938378-e54eab446dde?w=800",
+  ],
+  pharma: [
+    "https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=800",
+    "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800",
+  ],
+  lab: [
+    "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=800",
+    "https://images.unsplash.com/photo-1576319155264-99536e0be1ee?w=800",
+    "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=800",
+    "https://images.unsplash.com/photo-1614935151651-0bea6508db6b?w=800",
+  ],
+};
+
+function getTopicImageUrl(paper) {
+  const t = (paper.title || "").toLowerCase();
+  const journal = (paper.fulljournalname || "").toLowerCase();
+  const text = t + " " + journal;
+
+  let bucket;
+  if (/brain|neural|neuro|cognit|alzheim|parkinson|epilep|cerebell|hippoc|cortex/.test(text)) bucket = "neuro";
+  else if (/heart|cardiac|cardio|coronary|vascular|arterial|atrial|myocard/.test(text)) bucket = "cardio";
+  else if (/cancer|tumor|oncol|carcinoma|leukemia|lymphoma|glioma|melanoma/.test(text)) bucket = "cancer";
+  else if (/gene|genom|crispr|dna|rna|sequenc|chromos|allele|epigenet/.test(text)) bucket = "genetics";
+  else if (/virus|viral|covid|sars|infect|bacteria|pathogen|microb|fungal|parasit/.test(text)) bucket = "micro";
+  else if (/immun|vaccine|antibody|t cell|b cell|cytokine|inflam|autoimmun/.test(text)) bucket = "immune";
+  else if (/mri|imaging|scan|radiolog|ultrasound|x-ray|tomograph|pet scan/.test(text)) bucket = "imaging";
+  else if (/surgery|surgic|transplant|laparoscop|endoscop|biopsy/.test(text)) bucket = "surgery";
+  else if (/drug|pharma|therapeut|treatment|trial|placebo|dose|efficacy/.test(text)) bucket = "pharma";
+  else bucket = "lab";
+
+  const imgs = TOPIC_IMAGES[bucket];
+  return imgs[parseInt(paper.uid || "0") % imgs.length];
+}
+
+async function getCardFigure(paper) {
+  const pmid = paper.uid;
   if (figureCache[pmid] !== undefined) return figureCache[pmid];
-  const pmcId = extractPmcId(paper);
-  if (pmcId) {
-    const url = await fetchPmcFigure(pmcId);
+
+  // 1. Try Europe PMC figures (real paper figures, best quality)
+  const pmcid = extractPmcId(paper);
+  if (pmcid) {
+    const url = await fetchEuropePmcFigure(pmcid);
     if (url) { figureCache[pmid] = url; return url; }
   }
+
+  // 2. Always fall back to topic image — every card gets something relevant
   const topicUrl = getTopicImageUrl(paper);
   figureCache[pmid] = topicUrl;
   return topicUrl;
@@ -419,7 +418,7 @@ function PaperCard({ paper, altScore, onTap }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchEuropePmcFigure(paper.uid, paper).then(url => {
+    getCardFigure(paper).then(url => {
       if (!cancelled && url) setFigureUrl(url);
     });
     return () => { cancelled = true; };
