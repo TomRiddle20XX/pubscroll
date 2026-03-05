@@ -86,48 +86,6 @@ async function fetchAltmetric(doi) {
   } catch { altmetricCache[doi] = null; return null; }
 }
 
-// ─── PMC Figure fetcher ───────────────────────────────────────────────────────
-const figureCache = {};
-async function fetchPaperFigure(pmid, pmcid) {
-  const key = pmid;
-  if (figureCache[key] !== undefined) return figureCache[key];
-  try {
-    // Try PMC open access figures via NCBI figure API
-    const id = pmcid || null;
-    if (!id) {
-      // Try to get PMC ID from elink
-      const linkUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id=${pmid}&retmode=json`;
-      const r = await pfetch(linkUrl);
-      const d = await r.json();
-      const ids = d?.linksets?.[0]?.linksetdbs?.find(l => l.dbto === "pmc")?.links;
-      if (!ids?.length) { figureCache[key] = null; return null; }
-      const pmcId = ids[0];
-      // Fetch PMC article figures
-      const figUrl = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcId}/figure/`;
-      // Use OA API to get figure images
-      const oaUrl = `https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id=PMC${pmcId}`;
-      const oaR = await pfetch(oaUrl);
-      const oaText = await oaR.text();
-      // Parse XML for figure URLs — look for jpg/png links
-      const imgMatch = oaText.match(/href="(https?:\/\/[^"]+\.(jpg|jpeg|png))"/i);
-      if (imgMatch) {
-        figureCache[key] = imgMatch[1];
-        return figureCache[key];
-      }
-      // Fallback: try direct PMC figure thumbnail
-      const thumbUrl = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcId}/bin/`;
-      figureCache[key] = null;
-      return null;
-    }
-  } catch {
-    figureCache[key] = null;
-    return null;
-  }
-  figureCache[key] = null;
-  return null;
-}
-
-// Better approach: use Unpaywall/Semantic Scholar for open figures
 // ─── Figure fetching ─────────────────────────────────────────────────────────
 const figureCache = {};
 
