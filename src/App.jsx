@@ -212,14 +212,14 @@ async function getCardFigure(paper, log) {
       if (r.ok) {
         const d = await r.json();
         const figs = d?.figures?.figure;
-        log && log(`figs:${figs?.length||0} first:${JSON.stringify(figs?.[0])?.substring(0,120)}`);
+        console.log(`[PubScroll] EuroPMC figs:${figs?.length||0}`, JSON.stringify(figs?.[0]));
         if (figs?.length) {
           for (const fig of figs) {
+            console.log("[PubScroll] fig keys:", Object.keys(fig), JSON.stringify(fig));
             const url = fig?.url || fig?.httpUrl || fig?.thumbnailUrl || fig?.originalFileLink;
-            if (url) { figureCache[pmid] = url; log && log("✓ EuroPMC: "+url.substring(0,80)); return url; }
+            if (url) { figureCache[pmid] = url; log && log("✓ EuroPMC: "+url.split("/").pop()); return url; }
           }
-          // Log all keys so we can see what fields exist
-          log && log("fig keys: " + Object.keys(figs[0]||{}).join(","));
+          log && log("EuroPMC: no url field. keys="+Object.keys(figs[0]||{}).join(","));
         }
       }
     } catch(e) { log && log("EuroPMC err: "+e.message); }
@@ -232,33 +232,29 @@ async function getCardFigure(paper, log) {
         const xml = await r2.text();
         // Find ALL graphic hrefs in the XML
         const allMatches = [...xml.matchAll(/<graphic[^>]*xlink:href="([^"]+)"/gi)];
-        log && log(`NCBI graphics found: ${allMatches.length} refs: ${allMatches.slice(0,2).map(m=>m[1]).join(" | ")}`);
+        console.log(`[PubScroll] NCBI graphics found: ${allMatches.length}`, allMatches.map(m=>m[1]));
         for (const m of allMatches) {
           const href = m[1];
-          // href is often like "pmc/articles/PMC123/bin/filename" or just "filename"
-          // Try to construct the full NCBI bin URL
-          let name = href.split("/").pop();
-          // Remove extension if present, we'll try jpg
+          const name = href.split("/").pop();
           const baseName = name.replace(/\.[^.]+$/, "");
-          // Try direct URL first (some hrefs are already full paths)
           const candidates = [
             href.startsWith("http") ? href : null,
             `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.jpg`,
             `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.png`,
+            `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${baseName}.gif`,
             `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${name}`,
           ].filter(Boolean);
-          log && log(`trying candidates: ${candidates[0]?.substring(0,80)}`);
-          // Test the jpg URL via a HEAD request
+          console.log(`[PubScroll] trying:`, candidates);
           for (const candidate of candidates) {
             try {
               const test = await pfetch(candidate);
-              log && log(`candidate ${candidate.substring(0,60)} -> ${test.status}`);
+              console.log(`[PubScroll] ${candidate} -> ${test.status} ${test.ok ? "✓" : "✗"}`);
               if (test.ok) {
                 figureCache[pmid] = candidate;
-                log && log("✓ NCBI fig: " + candidate);
+                log && log("✓ " + candidate.split("/").pop());
                 return candidate;
               }
-            } catch(e2) { log && log(`candidate err: ${e2.message}`); }
+            } catch(e2) { console.log(`[PubScroll] fetch err: ${e2.message}`); }
           }
         }
       }
@@ -513,8 +509,8 @@ function PaperCard({ paper, altScore, onTap }) {
       {/* Figure/topic background image — always present */}
       <img
         src={figureUrl || ""}
-        onLoad={() => { setFigLoaded(true); setDebugInfo(prev => prev + " [IMG LOADED]"); }}
-        onError={e => { setDebugInfo(prev => prev + " [IMG 404/CORS]"); e.target.style.opacity = 0; }}
+        onLoad={() => { setFigLoaded(true); console.log("[PubScroll] IMG LOADED:", figureUrl); setDebugInfo(prev => prev + " ✓IMG"); }}
+        onError={e => { console.log("[PubScroll] IMG ERROR:", figureUrl); setDebugInfo(prev => prev + " ✗IMG"); e.target.style.opacity = 0; }}
         alt=""
         style={{
           position: "absolute", inset: 0, width: "100%", height: "100%",
