@@ -194,19 +194,37 @@ function getTopicImageUrl(paper) {
   return imgs[parseInt(paper.uid || "0") % imgs.length];
 }
 
-async function getCardFigure(paper) {
+async function getCardFigure(paper, log) {
   const pmid = paper.uid;
-  if (figureCache[pmid] !== undefined) return figureCache[pmid];
-
-  // 1. Try Europe PMC figures (real paper figures, best quality)
-  const pmcid = extractPmcId(paper);
-  if (pmcid) {
-    const url = await fetchEuropePmcFigure(pmcid);
-    if (url) { figureCache[pmid] = url; return url; }
+  if (figureCache[pmid] !== undefined) {
+    log && log("cached:" + (figureCache[pmid] || "null").toString().substring(0,50));
+    return figureCache[pmid];
   }
 
-  // 2. Always fall back to topic image — every card gets something relevant
+  const pmcid = extractPmcId(paper);
+  log && log(`pmid:${pmid} pmcid:${pmcid||"none"} - trying EuropePMC...`);
+
+  if (pmcid) {
+    try {
+      const apiUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/PMC${pmcid}/figures?format=json`;
+      log && log("fetching: " + apiUrl.substring(0,70));
+      const r = await fetch(apiUrl);
+      log && log(`europePMC status: ${r.status} ok:${r.ok}`);
+      if (r.ok) {
+        const d = await r.json();
+        log && log("response keys: " + Object.keys(d).join(","));
+        const figs = d?.figures?.figure;
+        log && log(`figures array: ${JSON.stringify(figs?.slice(0,1))?.substring(0,100)}`);
+        if (figs?.length) {
+          const url = figs[0]?.url || figs[0]?.httpUrl || figs[0]?.thumbnailUrl;
+          if (url) { figureCache[pmid] = url; log && log("✓ PMC fig: " + url); return url; }
+        }
+      }
+    } catch(e) { log && log("europePMC error: " + e.message); }
+  }
+
   const topicUrl = getTopicImageUrl(paper);
+  log && log("fallback topic url: " + topicUrl.substring(0,60));
   figureCache[pmid] = topicUrl;
   return topicUrl;
 }
@@ -416,10 +434,21 @@ function PaperCard({ paper, altScore, onTap }) {
   const [figureUrl, setFigureUrl] = useState(null);
   const [figLoaded, setFigLoaded] = useState(false);
 
+  const [debugInfo, setDebugInfo] = useState("");
+
   useEffect(() => {
     let cancelled = false;
-    getCardFigure(paper).then(url => {
-      if (!cancelled && url) setFigureUrl(url);
+    const pmcid = extractPmcId(paper);
+    setDebugInfo(`pmid:${paper.uid} pmcid:${pmcid || "none"}`);
+    
+    // Log every step
+    getCardFigure(paper, (msg) => {
+      if (!cancelled) setDebugInfo(msg);
+    }).then(url => {
+      if (!cancelled) {
+        setFigureUrl(url);
+        setDebugInfo(url ? `✓ ${url.substring(0,60)}` : "✗ no image");
+      }
     });
     return () => { cancelled = true; };
   }, [paper.uid]);
@@ -453,6 +482,16 @@ function PaperCard({ paper, altScore, onTap }) {
         backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
         backgroundSize: "40px 40px"
       }} />
+
+      {/* Debug info - remove after testing */}
+      {debugInfo && (
+        <div style={{
+          position: "absolute", bottom: 120, left: 12, right: 12, zIndex: 50,
+          background: "rgba(0,0,0,0.85)", borderRadius: 4, padding: "6px 10px",
+          fontSize: "0.55rem", color: "#0f0", fontFamily: "monospace",
+          wordBreak: "break-all", lineHeight: 1.4, pointerEvents: "none"
+        }}>{debugInfo}</div>
+      )}
 
       {/* TOP: just a subtle fade for readability under the banner — no logo */}
       <div style={{
