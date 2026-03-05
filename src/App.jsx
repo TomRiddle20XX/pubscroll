@@ -275,49 +275,46 @@ function AbstractOverlay({ paper, altScore, onClose, onEngagement }) {
 }
 
 // ─── Paper Card ───────────────────────────────────────────────────────────────
-function PaperCard({ paper, altScore, profileScore, onTap }) {
+function PaperCard({ paper, altScore, onTap }) {
   const doi = parseDoi(paper.elocationid);
   const journal = paper.fulljournalname || paper.source || "";
   const year = (paper.pubdate || "").substring(0, 4);
   const pubType = paper.pubtype?.find(t =>
     ["Meta-Analysis","Systematic Review","Clinical Trial","Randomized Controlled Trial","Review"].includes(t)
   );
-
-  // Hue shift based on altmetric buzz
   const buzzy = altScore && altScore > 50;
+  const accentColor = buzzy ? "#7ec850" : "#4a9edd";
   const bgGrad = buzzy
     ? "linear-gradient(160deg, #1a2a0a 0%, #0f1f0a 50%, #061208 100%)"
     : "linear-gradient(160deg, #0d2a4a 0%, #0a1f3a 50%, #061428 100%)";
-  const accentColor = buzzy ? "#7ec850" : "#4a9edd";
 
   return (
     <div onClick={onTap} style={{
-      width: "100%", height: "100%",
-      background: bgGrad,
-      display: "flex", flexDirection: "column", justifyContent: "flex-end",
+      width: "100%", height: "100%", background: bgGrad,
+      display: "flex", flexDirection: "column", justifyContent: "space-between",
       cursor: "pointer", userSelect: "none", position: "relative", overflow: "hidden",
     }}>
       {/* Grid texture */}
       <div style={{
-        position: "absolute", inset: 0, opacity: 0.035,
+        position: "absolute", inset: 0, opacity: 0.035, pointerEvents: "none",
         backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
         backgroundSize: "40px 40px"
       }} />
 
       {/* PMID watermark */}
       <div style={{
-        position: "absolute", top: "42%", left: "50%",
+        position: "absolute", top: "50%", left: "50%",
         transform: "translate(-50%, -50%)",
         fontSize: "clamp(70px, 22vw, 140px)", fontWeight: 900,
-        color: `${accentColor}08`, fontFamily: "Georgia, serif",
+        color: `${accentColor}06`, fontFamily: "Georgia, serif",
         letterSpacing: "-0.05em", userSelect: "none", whiteSpace: "nowrap", pointerEvents: "none"
       }}>{paper.uid}</div>
 
-      {/* Top bar */}
+      {/* TOP: logo + badges — sits below status bar via safe-area padding */}
       <div style={{
-        position: "absolute", top: 0, left: 0, right: 0,
-        background: "linear-gradient(180deg, rgba(6,14,26,0.96) 0%, transparent 100%)",
-        padding: "16px 20px 50px",
+        position: "relative", zIndex: 2,
+        padding: "calc(env(safe-area-inset-top, 0px) + 16px) 20px 20px",
+        background: "linear-gradient(180deg, rgba(4,10,20,0.95) 0%, transparent 100%)",
         display: "flex", alignItems: "center", justifyContent: "space-between"
       }}>
         <span style={{ fontFamily: "Georgia, serif", fontSize: "1.05rem", fontWeight: 700, color: accentColor }}>
@@ -344,24 +341,24 @@ function PaperCard({ paper, altScore, profileScore, onTap }) {
         </div>
       </div>
 
-      {/* Bottom content */}
+      {/* BOTTOM: content sits above home bar */}
       <div style={{
-        padding: "60px 24px 0",
-        background: "linear-gradient(0deg, rgba(4,10,20,0.99) 0%, rgba(4,10,20,0.85) 65%, transparent 100%)",
-        paddingBottom: 0,
+        position: "relative", zIndex: 2,
+        padding: "60px 24px calc(env(safe-area-inset-bottom, 0px) + 28px)",
+        background: "linear-gradient(0deg, rgba(4,10,20,0.99) 0%, rgba(4,10,20,0.88) 70%, transparent 100%)",
       }}>
         {/* Journal + year */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: "0.67rem", color: accentColor, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            {journal.length > 42 ? journal.substring(0, 42) + "…" : journal}
+            {journal.length > 44 ? journal.substring(0, 44) + "…" : journal}
           </span>
           {year && <span style={{ fontSize: "0.67rem", color: "#5a7a99", fontFamily: "monospace" }}>· {year}</span>}
         </div>
 
         {/* Title */}
         <h2 style={{
-          fontSize: "clamp(1rem, 3.8vw, 1.25rem)", fontWeight: 700, lineHeight: 1.5,
-          color: "#e8f4ff", marginBottom: 14,
+          fontSize: "clamp(1.05rem, 4vw, 1.3rem)", fontWeight: 700, lineHeight: 1.5,
+          color: "#e8f4ff", marginBottom: 12,
           fontFamily: "Georgia, serif", letterSpacing: "-0.01em",
           display: "-webkit-box", WebkitLineClamp: 5,
           WebkitBoxOrient: "vertical", overflow: "hidden"
@@ -379,7 +376,7 @@ function PaperCard({ paper, altScore, profileScore, onTap }) {
             background: `${accentColor}18`, border: `1px solid ${accentColor}40`,
             borderRadius: 20, padding: "7px 14px",
           }}>
-            <span style={{ fontSize: "0.73rem", color: accentColor, fontWeight: 600 }}>Tap to read abstract</span>
+            <span style={{ fontSize: "0.73rem", color: accentColor, fontWeight: 600 }}>Tap for abstract</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <a href={`https://pubmed.ncbi.nlm.nih.gov/${paper.uid}/`} target="_blank" rel="noreferrer"
@@ -395,10 +392,6 @@ function PaperCard({ paper, altScore, profileScore, onTap }) {
               </a>
             )}
           </div>
-        </div>
-
-        <div style={{ textAlign: "center", marginTop: 16, paddingBottom: 28, color: "#2a4a66", fontSize: "0.65rem", letterSpacing: "0.06em" }}>
-          ↕ swipe
         </div>
       </div>
     </div>
@@ -474,13 +467,15 @@ export default function PubScroll() {
   const [inputVal, setInputVal] = useState("");
   const [manualQuery, setManualQuery] = useState(null);
   const [showProfileHint, setShowProfileHint] = useState(false);
+  const [isSnapping, setIsSnapping] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
 
   const usedPmids = useRef(new Set());
   const touchStartY = useRef(null);
   const touchStartX = useRef(null);
   const isDragging = useRef(false);
+  const dragAxis = useRef(null); // "vertical" | "horizontal" | null
   const cardArriveTime = useRef(Date.now());
-  const [dragY, setDragY] = useState(0);
   const containerRef = useRef(null);
   const profileRef = useRef(profile);
   profileRef.current = profile;
@@ -540,27 +535,45 @@ export default function PubScroll() {
     cardArriveTime.current = Date.now();
   }, []);
 
-  // Touch
+  // Touch — TikTok snap style
   const onTouchStart = e => {
-    if (selectedPaper) return;
+    if (selectedPaper || isSnapping) return;
     touchStartY.current = e.touches[0].clientY;
     touchStartX.current = e.touches[0].clientX;
     isDragging.current = true;
+    dragAxis.current = null;
   };
   const onTouchMove = e => {
     if (!isDragging.current || selectedPaper) return;
     const dy = e.touches[0].clientY - touchStartY.current;
     const dx = e.touches[0].clientX - touchStartX.current;
-    if (Math.abs(dy) > Math.abs(dx)) { e.preventDefault(); setDragY(dy * 0.35); }
+    // Lock axis on first significant movement
+    if (!dragAxis.current) {
+      if (Math.abs(dy) > 8 || Math.abs(dx) > 8) {
+        dragAxis.current = Math.abs(dy) >= Math.abs(dx) ? "vertical" : "horizontal";
+      }
+    }
+    if (dragAxis.current === "vertical") {
+      e.preventDefault();
+      // Resist at edges
+      const atTop = currentIndex === 0 && dy > 0;
+      const atBottom = currentIndex >= papers.length - 1 && dy < 0;
+      const resistance = (atTop || atBottom) ? 0.15 : 1;
+      setDragOffset(dy * resistance);
+    }
   };
   const onTouchEnd = e => {
     if (!isDragging.current || selectedPaper) return;
     isDragging.current = false;
+    dragAxis.current = null;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    setDragY(0);
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 45) {
+    const velocity = Math.abs(dy) / Math.max(1, e.timeStamp - (touchStartY._startTime || e.timeStamp));
+    const threshold = window.innerHeight * 0.2; // 20% of screen height
+    setDragOffset(0);
+    if (Math.abs(dy) > threshold || Math.abs(dy) > 60) {
+      setIsSnapping(true);
       if (dy < 0) goNext(); else goPrev();
+      setTimeout(() => setIsSnapping(false), 400);
     }
   };
 
@@ -640,10 +653,15 @@ export default function PubScroll() {
         button { cursor: pointer; }
       `}</style>
 
-      {/* Card */}
-      <div ref={containerRef}
-        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{ width: "100%", height: "100%", transform: `translateY(${dragY}px)`, transition: isDragging.current ? "none" : "transform 0.22s ease" }}
+      {/* TikTok snap feed — render current + adjacent cards in a vertical stack */}
+      <div
+        ref={containerRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          position: "absolute", inset: 0, overflow: "hidden",
+        }}
       >
         {loading ? (
           <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg, #0d2a4a, #061428)", gap: 16 }}>
@@ -652,28 +670,44 @@ export default function PubScroll() {
               {isAlgoMode ? "Building your feed…" : "Loading papers…"}
             </span>
           </div>
-        ) : currentPaper ? (
-          <div key={`card-${currentIndex}`} style={{ width: "100%", height: "100%", animation: "cardIn 0.28s ease" }}>
-            <PaperCard
-              paper={currentPaper}
-              altScore={currentPaper._altScore}
-              profileScore={currentPaper._profileScore}
-              onTap={() => {
-                recordEngagement(currentPaper, "read");
-                setSelectedPaper(currentPaper);
-              }}
-            />
-          </div>
-        ) : (
+        ) : papers.length === 0 ? (
           <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#4a9edd", fontFamily: "Georgia, serif", flexDirection: "column", gap: 12 }}>
             <span style={{ fontSize: "2rem" }}>∅</span>
             <span>No papers found</span>
+          </div>
+        ) : (
+          // Stack: prev card above, current in view, next card below
+          // Offset entire stack by dragOffset so adjacent cards peek during drag
+          <div style={{
+            position: "absolute", inset: 0,
+            transform: `translateY(calc(${-currentIndex * 100}% + ${dragOffset}px))`,
+            transition: isDragging.current ? "none" : "transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)",
+          }}>
+            {papers.map((paper, i) => {
+              // Only render cards near current index for perf
+              if (Math.abs(i - currentIndex) > 2) return null;
+              return (
+                <div key={paper.uid} style={{
+                  position: "absolute", top: `${i * 100}%`,
+                  width: "100%", height: "100%",
+                }}>
+                  <PaperCard
+                    paper={paper}
+                    altScore={paper._altScore}
+                    onTap={i === currentIndex ? () => {
+                      recordEngagement(paper, "read");
+                      setSelectedPaper(paper);
+                    } : undefined}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Progress dots */}
-      {papers.length > 0 && (
+      {papers.length > 0 && !loading && (
         <div style={{ position: "fixed", right: 10, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 4, zIndex: 10 }}>
           {papers.slice(Math.max(0, currentIndex - 4), currentIndex + 6).map((_, i) => {
             const ri = Math.max(0, currentIndex - 4) + i;
@@ -683,7 +717,7 @@ export default function PubScroll() {
       )}
 
       {/* Counter + algo badge */}
-      <div style={{ position: "fixed", left: 14, bottom: 26, zIndex: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ position: "fixed", left: 14, bottom: "calc(env(safe-area-inset-bottom, 0px) + 26px)", zIndex: 10, display: "flex", flexDirection: "column", gap: 6 }}>
         {papers.length > 0 && (
           <span style={{ fontFamily: "monospace", fontSize: "0.62rem", color: "rgba(74,158,221,0.4)" }}>
             {currentIndex + 1} loaded
@@ -699,8 +733,8 @@ export default function PubScroll() {
         )}
       </div>
 
-      {/* Top controls */}
-      <div style={{ position: "fixed", top: 14, right: 14, zIndex: 20, display: "flex", gap: 8 }}>
+      {/* Top controls — safe area aware */}
+      <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top, 0px) + 14px)", right: 14, zIndex: 20, display: "flex", gap: 8 }}>
         <button onClick={() => { setShowSearch(s => !s); setShowMenu(false); }}
           style={{ background: "rgba(6,20,40,0.9)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 6, color: "#4a9edd", width: 36, height: 36, fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}>🔍</button>
         <button onClick={() => { setShowMenu(s => !s); setShowSearch(false); }}
@@ -711,7 +745,7 @@ export default function PubScroll() {
 
       {/* Search */}
       {showSearch && (
-        <div style={{ position: "fixed", top: 58, right: 14, left: 14, zIndex: 30, background: "rgba(6,18,38,0.98)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 8, padding: 14, animation: "fadeIn 0.15s ease", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
+        <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top, 0px) + 58px)", right: 14, left: 14, zIndex: 30, background: "rgba(6,18,38,0.98)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 8, padding: 14, animation: "fadeIn 0.15s ease", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
           <div style={{ display: "flex", gap: 8 }}>
             <input autoFocus value={inputVal} onChange={e => setInputVal(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleSearch()}
@@ -725,7 +759,7 @@ export default function PubScroll() {
 
       {/* Menu */}
       {showMenu && (
-        <div style={{ position: "fixed", top: 58, right: 14, zIndex: 30, background: "rgba(6,18,38,0.98)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 8, padding: 6, animation: "fadeIn 0.15s ease", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
+        <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top, 0px) + 58px)", right: 14, zIndex: 30, background: "rgba(6,18,38,0.98)", border: "1px solid rgba(74,158,221,0.3)", borderRadius: 8, padding: 6, animation: "fadeIn 0.15s ease", minWidth: 200, boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }}>
           <button onClick={resetToAlgo} style={{ width: "100%", background: isAlgoMode ? "rgba(74,158,221,0.15)" : "transparent", border: "none", color: isAlgoMode ? "#4a9edd" : "#7a9ab8", padding: "9px 14px", borderRadius: 4, fontSize: "0.82rem", textAlign: "left", fontWeight: isAlgoMode ? 700 : 400 }}>
             ✦ For You (algo)
           </button>
