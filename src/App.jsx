@@ -790,15 +790,17 @@ export default function PubScroll() {
   const isAlgoMode = !manualQuery;
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#061428" }}>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#061428", position: "fixed", inset: 0, touchAction: "none" }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body, #root { overflow: hidden; height: 100%; width: 100%; overscroll-behavior: none; }
+        ::-webkit-scrollbar { display: none; }
+        * { scrollbar-width: none; -ms-overflow-style: none; }
         @keyframes fadeIn { from{opacity:0}to{opacity:1} }
         @keyframes slideUp { from{transform:translateY(100%)}to{transform:translateY(0)} }
         @keyframes spin { to{transform:rotate(360deg)} }
         @keyframes cardIn { from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)} }
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
-        body { overflow: hidden; }
         a:hover { opacity: 0.8; }
         button { cursor: pointer; }
       `}</style>
@@ -810,7 +812,7 @@ export default function PubScroll() {
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{
-          position: "absolute", inset: 0, overflow: "hidden",
+          position: "absolute", inset: 0, overflow: "hidden", touchAction: "none",
         }}
       >
         {loading ? (
@@ -831,7 +833,8 @@ export default function PubScroll() {
           <div style={{
             position: "absolute", inset: 0,
             transform: `translateY(calc(${-currentIndex * 100}% + ${dragOffset}px))`,
-            transition: isDragging.current ? "none" : "transform 0.3s ease-out",
+            transition: isDragging.current ? "none" : "transform 0.28s linear",
+            willChange: "transform",
           }}>
             {papers.map((paper, i) => {
               // Only render cards near current index for perf
