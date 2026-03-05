@@ -128,64 +128,66 @@ async function fetchPaperFigure(pmid, pmcid) {
 }
 
 // Better approach: use Unpaywall/Semantic Scholar for open figures
-async function fetchSemanticFigure(doi) {
-  if (!doi) return null;
+// ─── Figure fetching ─────────────────────────────────────────────────────────
+const figureCache = {};
+
+function extractPmcId(paper) {
+  const ids = paper.articleids || [];
+  const pmc = ids.find(a => a.idtype === "pmc");
+  return pmc ? pmc.value.replace("PMC", "") : null;
+}
+
+async function fetchPmcFigure(pmcId) {
+  if (!pmcId) return null;
   try {
-    // Semantic Scholar paper lookup - get paperId first
-    const lookupUrl = `https://api.semanticscholar.org/graph/v1/paper/DOI:${doi}?fields=openAccessPdf`;
-    const r = await fetch(lookupUrl);
-    if (!r.ok) return null;
-    const d = await r.json();
-
-    // If there is an open access PDF, try to get a figure via the paper page
-    // Use paperId to fetch figures from the S2 figures endpoint
-    if (d.paperId) {
-      const figUrl = `https://api.semanticscholar.org/graph/v1/paper/${d.paperId}?fields=figures`;
-      const fr = await fetch(figUrl);
-      if (fr.ok) {
-        const fd = await fr.json();
-        // figures is an array of {caption, url}
-        const figs = fd.figures || [];
-        // Prefer figures that look like charts/graphs (avoid tiny icons)
-        const goodFig = figs.find(f => f.url && (f.url.includes(".jpg") || f.url.includes(".png")));
-        if (goodFig) return goodFig.url;
-        if (figs[0]?.url) return figs[0].url;
-      }
+    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcId}&rettype=xml&retmode=xml`;
+    const r = await pfetch(url);
+    const text = await r.text();
+    const match = text.match(/xlink:href="([^"]+)"/i);
+    if (match) {
+      const name = match[1].split("/").pop();
+      return `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcId}/bin/${name}.jpg`;
     }
-
-    // Fallback: try unpaywall to get open access PDF thumbnail via doi.org
     return null;
   } catch { return null; }
 }
 
-// Try to get a figure via Europe PMC (good coverage for biomedical papers)
-const europePmcFigCache = {};
-async function fetchEuropePmcFigure(pmid) {
-  if (!pmid) return null;
-  if (europePmcFigCache[pmid] !== undefined) return europePmcFigCache[pmid];
-  try {
-    // Get PMC figures via Europe PMC figure API
-    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:${pmid}%20AND%20SRC:MED&resulttype=core&format=json&pageSize=1`;
-    const r = await fetch(url);
-    if (!r.ok) { europePmcFigCache[pmid] = null; return null; }
-    const d = await r.json();
-    const article = d?.resultList?.result?.[0];
-    if (!article) { europePmcFigCache[pmid] = null; return null; }
-    const pmcid = article.pmcid;
-    if (!pmcid) { europePmcFigCache[pmid] = null; return null; }
-    // Fetch figures for this PMC article
-    const figApiUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/figures?format=json`;
-    const figR = await fetch(figApiUrl);
-    if (!figR.ok) { europePmcFigCache[pmid] = null; return null; }
-    const figD = await figR.json();
-    const figures = figD?.figures?.figure;
-    if (!figures?.length) { europePmcFigCache[pmid] = null; return null; }
-    // Get the URL of the first figure image
-    const fig = figures[0];
-    const imgUrl = fig?.url || fig?.originalFileLink;
-    europePmcFigCache[pmid] = imgUrl || null;
-    return europePmcFigCache[pmid];
-  } catch { europePmcFigCache[pmid] = null; return null; }
+function getTopicImageUrl(paper) {
+  const title = (paper.title || "").toLowerCase();
+  const topics = [
+    { keys: ["brain","neural","neuro","cognit","alzheim","parkinson","epilep"], q: "neuroscience brain" },
+    { keys: ["heart","cardiac","cardio","coronary","vascular"], q: "heart cardiology" },
+    { keys: ["cancer","tumor","oncol","carcinoma","leukemia"], q: "cancer cells microscope" },
+    { keys: ["gene","genom","crispr","dna","rna","sequenc"], q: "dna genetics" },
+    { keys: ["virus","viral","covid","infect","bacteria","pathogen"], q: "virus pathogen microscope" },
+    { keys: ["microbiome","gut","intestin","colon"], q: "gut microbiome" },
+    { keys: ["lung","pulmon","respirat","asthma"], q: "lung respiratory" },
+    { keys: ["depress","anxiety","mental","psychiat"], q: "mental health brain" },
+    { keys: ["diabet","insulin","glucose","metabol"], q: "diabetes metabolism" },
+    { keys: ["vaccine","immuniz","antibody"], q: "vaccine immunology" },
+    { keys: ["mri","imaging","scan","radiolog"], q: "medical imaging mri" },
+    { keys: ["protein","enzyme","molecul","biochem"], q: "molecular biology protein" },
+    { keys: ["surgery","surgic","transplant"], q: "surgery operating room" },
+    { keys: ["bone","joint","arthrit","spine"], q: "bone anatomy skeleton" },
+    { keys: ["liver","hepat","kidney","renal"], q: "organ anatomy biology" },
+  ];
+  const matched = topics.find(t => t.keys.some(k => title.includes(k)));
+  const q = matched ? matched.q : "medical science research";
+  const seed = parseInt(paper.uid || "1") % 100;
+  return `https://source.unsplash.com/800x1200/?${encodeURIComponent(q)}&sig=${seed}`;
+}
+
+async function fetchEuropePmcFigure(pmid, paper) {
+  if (!pmid) return getTopicImageUrl(paper);
+  if (figureCache[pmid] !== undefined) return figureCache[pmid];
+  const pmcId = extractPmcId(paper);
+  if (pmcId) {
+    const url = await fetchPmcFigure(pmcId);
+    if (url) { figureCache[pmid] = url; return url; }
+  }
+  const topicUrl = getTopicImageUrl(paper);
+  figureCache[pmid] = topicUrl;
+  return topicUrl;
 }
 
 // ─── Profile helpers ──────────────────────────────────────────────────────────
@@ -395,18 +397,11 @@ function PaperCard({ paper, altScore, onTap }) {
 
   useEffect(() => {
     let cancelled = false;
-    // Try Europe PMC first (better biomedical coverage), fall back to Semantic Scholar
-    const pmid = paper.uid;
-    fetchEuropePmcFigure(pmid).then(url => {
-      if (cancelled) return;
-      if (url) { setFigureUrl(url); return; }
-      // Fallback to Semantic Scholar
-      fetchSemanticFigure(doi).then(u => {
-        if (!cancelled && u) setFigureUrl(u);
-      });
+    fetchEuropePmcFigure(paper.uid, paper).then(url => {
+      if (!cancelled && url) setFigureUrl(url);
     });
     return () => { cancelled = true; };
-  }, [paper.uid, doi]);
+  }, [paper.uid]);
 
   return (
     <div onClick={onTap} style={{
@@ -414,25 +409,24 @@ function PaperCard({ paper, altScore, onTap }) {
       display: "flex", flexDirection: "column", justifyContent: "space-between",
       cursor: "pointer", userSelect: "none", position: "relative", overflow: "hidden",
     }}>
-      {/* Figure background image */}
-      {figureUrl && (
-        <img
-          src={figureUrl}
-          onLoad={() => setFigLoaded(true)}
-          onError={() => setFigureUrl(null)}
-          alt=""
-          style={{
-            position: "absolute", inset: 0, width: "100%", height: "100%",
-            objectFit: "cover", objectPosition: "center",
-            opacity: figLoaded ? 0.28 : 0,
-            transition: "opacity 0.8s ease",
-            filter: "saturate(0.7) brightness(0.6)",
-            pointerEvents: "none", zIndex: 1,
-          }}
-        />
-      )}
+      {/* Figure/topic background image — always present */}
+      <img
+        src={figureUrl || ""}
+        onLoad={() => setFigLoaded(true)}
+        onError={e => { e.target.style.display = "none"; }}
+        alt=""
+        style={{
+          position: "absolute", inset: 0, width: "100%", height: "100%",
+          objectFit: "cover", objectPosition: "center",
+          opacity: figureUrl && figLoaded ? 0.22 : 0,
+          transition: "opacity 1s ease",
+          filter: "saturate(0.5) brightness(0.5)",
+          pointerEvents: "none", zIndex: 1,
+          display: figureUrl ? "block" : "none",
+        }}
+      />
 
-      {/* Grid texture — always shown */}
+      {/* Grid texture — always shown underneath */}
       <div style={{
         position: "absolute", inset: 0, opacity: 0.035, pointerEvents: "none",
         backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
@@ -809,7 +803,7 @@ export default function PubScroll() {
           <div style={{
             position: "absolute", inset: 0,
             transform: `translateY(calc(${-currentIndex * 100}% + ${dragOffset}px))`,
-            transition: isDragging.current ? "none" : "transform 0.28s linear",
+            transition: isDragging.current ? "none" : "transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
             willChange: "transform",
           }}>
             {papers.map((paper, i) => {
