@@ -217,7 +217,12 @@ async function getCardFigure(paper, log) {
           for (const fig of figs) {
             console.log("[PubScroll] fig keys:", Object.keys(fig), JSON.stringify(fig));
             const url = fig?.url || fig?.httpUrl || fig?.thumbnailUrl || fig?.originalFileLink;
-            if (url) { figureCache[pmid] = url; log && log("✓ EuroPMC: "+url.split("/").pop()); return url; }
+            if (url) {
+              const proxied = url.startsWith("https://corsproxy") ? url : "https://corsproxy.io/?" + encodeURIComponent(url);
+              figureCache[pmid] = proxied;
+              log && log("✓ EuroPMC: "+url.split("/").pop());
+              return proxied;
+            }
           }
           log && log("EuroPMC: no url field. keys="+Object.keys(figs[0]||{}).join(","));
         }
@@ -250,9 +255,11 @@ async function getCardFigure(paper, log) {
               const test = await pfetch(candidate);
               console.log(`[PubScroll] ${candidate} -> ${test.status} ${test.ok ? "✓" : "✗"}`);
               if (test.ok) {
-                figureCache[pmid] = candidate;
+                // Route through proxy so browser can load the image
+                const proxied = "https://corsproxy.io/?" + encodeURIComponent(candidate);
+                figureCache[pmid] = proxied;
                 log && log("✓ " + candidate.split("/").pop());
-                return candidate;
+                return proxied;
               }
             } catch(e2) { console.log(`[PubScroll] fetch err: ${e2.message}`); }
           }
@@ -533,10 +540,11 @@ function PaperCard({ paper, altScore, onTap }) {
       {/* Debug info - remove after testing */}
       {debugInfo && (
         <div style={{
-          position: "absolute", bottom: 120, left: 12, right: 12, zIndex: 50,
-          background: "rgba(0,0,0,0.85)", borderRadius: 4, padding: "6px 10px",
-          fontSize: "0.55rem", color: "#0f0", fontFamily: "monospace",
-          wordBreak: "break-all", lineHeight: 1.4, pointerEvents: "none"
+          position: "absolute", bottom: 120, left: 8, right: 8, zIndex: 50,
+          background: "rgba(0,0,0,0.92)", borderRadius: 4, padding: "6px 8px",
+          fontSize: "0.5rem", color: "#0f0", fontFamily: "monospace",
+          wordBreak: "break-all", lineHeight: 1.6, pointerEvents: "none",
+          maxHeight: 80, overflow: "hidden",
         }}>{debugInfo}</div>
       )}
 
