@@ -218,7 +218,7 @@ async function getCardFigure(paper, log) {
             console.log("[PubScroll] fig keys:", Object.keys(fig), JSON.stringify(fig));
             const url = fig?.url || fig?.httpUrl || fig?.thumbnailUrl || fig?.originalFileLink;
             if (url) {
-              const proxied = url.startsWith("https://corsproxy") ? url : "https://corsproxy.io/?" + encodeURIComponent(url);
+              const proxied = url.startsWith("https://corsproxy") ? url : "https://corsproxy.io/?" + url;
               figureCache[pmid] = proxied;
               log && log("✓ EuroPMC: "+url.split("/").pop());
               return proxied;
@@ -256,7 +256,7 @@ async function getCardFigure(paper, log) {
               console.log(`[PubScroll] ${candidate} -> ${test.status} ${test.ok ? "✓" : "✗"}`);
               if (test.ok) {
                 // Route through proxy so browser can load the image
-                const proxied = "https://corsproxy.io/?" + encodeURIComponent(candidate);
+                const proxied = "https://corsproxy.io/?" + candidate;
                 figureCache[pmid] = proxied;
                 log && log("✓ " + candidate.split("/").pop());
                 return proxied;
