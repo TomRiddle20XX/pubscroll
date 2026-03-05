@@ -1,0 +1,24 @@
+{
+  "name": "PubScroll",
+  "short_name": "PubScroll",
+  "description": "Swipe through PubMed papers like TikTok",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#061428",
+  "theme_color": "#061428",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
