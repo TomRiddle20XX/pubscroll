@@ -131,14 +131,85 @@ async function fetchPaperFigure(pmid, pmcid) {
 async function fetchSemanticFigure(doi) {
   if (!doi) return null;
   try {
-    const url = `https://api.semanticscholar.org/graph/v1/paper/DOI:${doi}?fields=openAccessPdf,figures`;
-    const r = await fetch(url);
+    // Semantic Scholar paper lookup - get paperId first
+    const lookupUrl = `https://api.semanticscholar.org/graph/v1/paper/DOI:${doi}?fields=openAccessPdf`;
+    const r = await fetch(lookupUrl);
     if (!r.ok) return null;
     const d = await r.json();
-    // figures field has image URLs
-    if (d.figures?.length) return d.figures[0].url;
+
+    // If there is an open access PDF, try to get a figure via the paper page
+    // Use paperId to fetch figures from the S2 figures endpoint
+    if (d.paperId) {
+      const figUrl = `https://api.semanticscholar.org/graph/v1/paper/${d.paperId}?fields=figures`;
+      const fr = await fetch(figUrl);
+      if (fr.ok) {
+        const fd = await fr.json();
+        // figures is an array of {caption, url}
+        const figs = fd.figures || [];
+        // Prefer figures that look like charts/graphs (avoid tiny icons)
+        const goodFig = figs.find(f => f.url && (f.url.includes(".jpg") || f.url.includes(".png")));
+        if (goodFig) return goodFig.url;
+        if (figs[0]?.url) return figs[0].url;
+      }
+    }
+
+    // Fallback: try unpaywall to get open access PDF thumbnail via doi.org
     return null;
   } catch { return null; }
+}
+
+// Try to get a figure via Europe PMC (good coverage for biomedical papers)
+const europePmcFigCache = {};
+async function fetchEuropePmcFigure(pmid) {
+  if (!pmid) return null;
+  if (europePmcFigCache[pmid] !== undefined) return europePmcFigCache[pmid];
+  try {
+    // Get PMC figures via Europe PMC figure API
+    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:${pmid}%20AND%20SRC:MED&resulttype=core&format=json&pageSize=1`;
+    const r = await fetch(url);
+    if (!r.ok) { europePmcFigCache[pmid] = null; return null; }
+    const d = await r.json();
+    const article = d?.resultList?.result?.[0];
+    if (!article) { europePmcFigCache[pmid] = null; return null; }
+    const pmcid = article.pmcid;
+    if (!pmcid) { europePmcFigCache[pmid] = null; return null; }
+    // Fetch figures for this PMC article
+    const figApiUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/figures?format=json`;
+    const figR = await fetch(figApiUrl);
+    if (!figR.ok) { europePmcFigCache[pmid] = null; return null; }
+    const figD = await figR.json();
+    const figures = figD?.figures?.figure;
+    if (!figures?.length) { europePmcFigCache[pmid] = null; return null; }
+    // Get the URL of the first figure image
+    const fig = figures[0];
+    const imgUrl = fig?.url || fig?.originalFileLink;
+    europePmcFigCache[pmid] = imgUrl || null;
+    return europePmcFigCache[pmid];
+  } catch { europePmcFigCache[pmid] = null; return null; }
+}
+
+// ─── Europe PMC figure fetcher ───────────────────────────────────────────────
+const europePmcFigCache = {};
+async function fetchEuropePmcFigure(pmid) {
+  if (!pmid) return null;
+  if (europePmcFigCache[pmid] !== undefined) return europePmcFigCache[pmid];
+  try {
+    const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:${pmid}%20AND%20SRC:MED&resulttype=core&format=json&pageSize=1`;
+    const r = await fetch(url);
+    if (!r.ok) { europePmcFigCache[pmid] = null; return null; }
+    const d = await r.json();
+    const article = d?.resultList?.result?.[0];
+    const pmcid = article?.pmcid;
+    if (!pmcid) { europePmcFigCache[pmid] = null; return null; }
+    const figR = await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/figures?format=json`);
+    if (!figR.ok) { europePmcFigCache[pmid] = null; return null; }
+    const figD = await figR.json();
+    const figures = figD?.figures?.figure;
+    if (!figures?.length) { europePmcFigCache[pmid] = null; return null; }
+    const imgUrl = figures[0]?.url || figures[0]?.originalFileLink || null;
+    europePmcFigCache[pmid] = imgUrl;
+    return imgUrl;
+  } catch { europePmcFigCache[pmid] = null; return null; }
 }
 
 // ─── Profile helpers ──────────────────────────────────────────────────────────
@@ -348,11 +419,18 @@ function PaperCard({ paper, altScore, onTap }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchSemanticFigure(doi).then(url => {
-      if (!cancelled && url) setFigureUrl(url);
+    // Try Europe PMC first (better biomedical coverage), fall back to Semantic Scholar
+    const pmid = paper.uid;
+    fetchEuropePmcFigure(pmid).then(url => {
+      if (cancelled) return;
+      if (url) { setFigureUrl(url); return; }
+      // Fallback to Semantic Scholar
+      fetchSemanticFigure(doi).then(u => {
+        if (!cancelled && u) setFigureUrl(u);
+      });
     });
     return () => { cancelled = true; };
-  }, [doi]);
+  }, [paper.uid, doi]);
 
   return (
     <div onClick={onTap} style={{
@@ -378,14 +456,12 @@ function PaperCard({ paper, altScore, onTap }) {
         />
       )}
 
-      {/* Grid texture — shown when no figure */}
-      {!figureUrl && (
-        <div style={{
-          position: "absolute", inset: 0, opacity: 0.035, pointerEvents: "none",
-          backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
-          backgroundSize: "40px 40px"
-        }} />
-      )}
+      {/* Grid texture — always shown */}
+      <div style={{
+        position: "absolute", inset: 0, opacity: 0.035, pointerEvents: "none",
+        backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
+        backgroundSize: "40px 40px"
+      }} />
 
       {/* TOP: just a subtle fade for readability under the banner — no logo */}
       <div style={{
@@ -755,7 +831,7 @@ export default function PubScroll() {
           <div style={{
             position: "absolute", inset: 0,
             transform: `translateY(calc(${-currentIndex * 100}% + ${dragOffset}px))`,
-            transition: isDragging.current ? "none" : "transform 0.38s cubic-bezier(0.32, 0.72, 0, 1)",
+            transition: isDragging.current ? "none" : "transform 0.3s ease-out",
           }}>
             {papers.map((paper, i) => {
               // Only render cards near current index for perf
@@ -780,32 +856,9 @@ export default function PubScroll() {
         )}
       </div>
 
-      {/* Progress dots */}
-      {papers.length > 0 && !loading && (
-        <div style={{ position: "fixed", right: 10, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 4, zIndex: 10 }}>
-          {papers.slice(Math.max(0, currentIndex - 4), currentIndex + 6).map((_, i) => {
-            const ri = Math.max(0, currentIndex - 4) + i;
-            return <div key={ri} style={{ width: ri === currentIndex ? 4 : 3, height: ri === currentIndex ? 20 : 5, borderRadius: 2, background: ri === currentIndex ? "#4a9edd" : "rgba(74,158,221,0.2)", transition: "all 0.2s" }} />;
-          })}
-        </div>
-      )}
 
-      {/* Counter + algo badge */}
-      <div style={{ position: "fixed", left: 14, bottom: "calc(env(safe-area-inset-bottom, 0px) + 26px)", zIndex: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-        {papers.length > 0 && (
-          <span style={{ fontFamily: "monospace", fontSize: "0.62rem", color: "rgba(74,158,221,0.4)" }}>
-            {currentIndex + 1} loaded
-          </span>
-        )}
-        {isAlgoMode && (
-          <span style={{ fontSize: "0.58rem", fontWeight: 700, color: "rgba(74,158,221,0.35)", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "monospace" }}>
-            ✦ algo feed
-          </span>
-        )}
-        {loadingMore && (
-          <span style={{ fontSize: "0.6rem", color: "rgba(74,158,221,0.4)", fontFamily: "monospace", animation: "pulse 1.2s ease infinite" }}>fetching…</span>
-        )}
-      </div>
+
+
 
       {/* Top banner — PubScroll logo + controls */}
       <div style={{
